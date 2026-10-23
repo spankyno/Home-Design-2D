@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+**/dist/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+!.env.cloudflare.example
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Cloudflare
+.wrangler/
+.dev.vars
+cloudflare-worker/.wrangler/
+
+# Test / coverage
+coverage/
+
+# Replit local
+.replit
+.cache/
