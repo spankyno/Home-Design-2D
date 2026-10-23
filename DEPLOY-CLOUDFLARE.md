@@ -1,50 +1,53 @@
-# Deploy Floor Plan Designer on Cloudflare Pages
+# Deploy on Cloudflare Pages
 
-Static SPA only (Vite). No email API, no Resend, no Worker required.
+## Cause of the previous build failure
 
-## 1. Push to Git
+1. Pages ran **`bun install`** instead of **pnpm** (this monorepo is pnpm-only).
+2. Transitive dep **`@scalar/types@0.25.0`** has a **404 tarball** on npm (broken publish). Pinned to `0.24.0` in root `package.json`.
 
-```bash
-git init
-git add .
-git commit -m "Floor plan designer"
-git branch -M main
-git remote add origin https://github.com/YOUR_USER/YOUR_REPO.git
-git push -u origin main
-```
-
-## 2. Cloudflare Pages
-
-1. Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**.
-2. Select the repo.
+## Pages settings (copy exactly)
 
 | Setting | Value |
 |---------|--------|
 | Framework preset | Vite |
-| Build command | `corepack enable && pnpm install && pnpm --filter @workspace/floorplan run build` |
-| Build output directory | `artifacts/floorplan/dist/public` |
-| Root directory | *(empty)* |
+| **Build command** | `corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --filter @workspace/floorplan... && pnpm --filter @workspace/floorplan run build` |
+| **Build output directory** | `artifacts/floorplan/dist/public` |
+| Root directory | *(leave empty)* |
 
-**Environment variables:**
+### Environment variables
 
 | Name | Value |
 |------|--------|
 | `NODE_VERSION` | `22` |
 | `BASE_PATH` | `/` |
+| `PNPM_VERSION` | `9.15.9` |
 
-3. **Save and Deploy**.
+Optional but recommended (disables bun auto-install if your account has it):
 
-## 3. Direct upload (no Git)
+| Name | Value |
+|------|--------|
+| `SKIP_DEPENDENCY_INSTALL` | `true` |
+
+When `SKIP_DEPENDENCY_INSTALL=true`, the **Build command** must install deps itself (the command above already does `pnpm install`).
+
+## Why this build command
+
+- `corepack prepare pnpm@9.15.9` → forces pnpm (never bun/npm).
+- `pnpm install --filter @workspace/floorplan...` → installs **only** the floorplan app and its workspace deps (skips `api-spec`/orval and the broken scalar chain when possible).
+- Output path matches Vite `build.outDir`.
+
+## After a failed build
+
+1. Update the repo with this fixed `package.json` / `pnpm-workspace.yaml`.
+2. In Pages → Settings → Builds: paste the build command above.
+3. Retry deployment.
+
+## Local check
 
 ```bash
 corepack enable
-pnpm install
-export BASE_PATH=/
-pnpm --filter @workspace/floorplan run build
-npx wrangler pages deploy artifacts/floorplan/dist/public --project-name=floorplan-editor
+corepack prepare pnpm@9.15.9 --activate
+pnpm install --filter @workspace/floorplan...
+BASE_PATH=/ pnpm --filter @workspace/floorplan run build
+ls artifacts/floorplan/dist/public
 ```
-
-## Notes
-
-- The editor runs entirely in the browser (localStorage). Export PNG / PDF / JSON works client-side.
-- `artifacts/api-server` is optional (health check only) and is **not** needed for Pages.
