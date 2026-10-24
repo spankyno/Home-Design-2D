@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   MousePointer2,
+  Hand,
   PenLine,
   DoorOpen,
   Ruler,
+  Pentagon,
   Eraser,
   Sofa,
   Type,
@@ -46,11 +48,13 @@ const TOOLS: {
   key: string;
 }[] = [
   { tool: "select", label: "Seleccionar", icon: MousePointer2, key: "V" },
+  { tool: "pan", label: "Mover vista (Pan)", icon: Hand, key: "H" },
   { tool: "wall", label: "Pared", icon: PenLine, key: "W" },
   { tool: "door", label: "Puerta", icon: DoorOpen, key: "D" },
   { tool: "window", label: "Ventana", icon: HouseWindow, key: "N" },
   { tool: "text", label: "Texto", icon: Type, key: "T" },
-  { tool: "measure", label: "Medir", icon: Ruler, key: "M" },
+  { tool: "measure", label: "Medir longitud", icon: Ruler, key: "M" },
+  { tool: "area", label: "Medir área", icon: Pentagon, key: "A" },
   { tool: "delete", label: "Eliminar", icon: Eraser, key: "X" },
 ];
 

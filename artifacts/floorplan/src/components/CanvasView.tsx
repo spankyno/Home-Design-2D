@@ -14,6 +14,9 @@ import {
   snapToAngle,
   snapToGrid,
   closestPointOnSegment,
+  pointInPolygon,
+  polygonArea,
+  polygonCentroid,
 } from "../lib/geometry";
 import {
   wallGeom,
@@ -87,6 +90,13 @@ export default function CanvasView() {
     null,
   );
   const [measure, setMeasure] = useState<MeasureState | null>(null);
+  // Area tool: vertices picked so far, and whether the polygon has been closed.
+  const [areaPts, setAreaPts] = useState<{ x: number; y: number }[]>([]);
+  const [areaClosed, setAreaClosed] = useState(false);
+  const resetArea = () => {
+    setAreaPts([]);
+    setAreaClosed(false);
+  };
   type Rect = { ax: number; ay: number; bx: number; by: number };
   const [marquee, setMarqueeState] = useState<Rect | null>(null);
   // Mirror the marquee in a ref so endInteraction always reads the latest box,
@@ -121,6 +131,8 @@ export default function CanvasView() {
       if (e.key === "Escape") {
         setChainStart(null);
         setMeasure(null);
+        setAreaPts([]);
+        setAreaClosed(false);
         setMarquee(null);
         marqueeActive.current = false;
         setSelection(null);
@@ -141,7 +153,27 @@ export default function CanvasView() {
   useEffect(() => {
     if (tool !== "wall") setChainStart(null);
     if (tool !== "measure") setMeasure(null);
+    if (tool !== "area") {
+      setAreaPts([]);
+      setAreaClosed(false);
+    }
   }, [tool]);
+
+  // Enter closes the polygon (>= 3 vertices); Backspace removes the last vertex.
+  useEffect(() => {
+    if (tool !== "area") return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      if (e.key === "Enter" && !areaClosed && areaPts.length >= 3) {
+        setAreaClosed(true);
+      } else if (e.key === "Backspace" && !areaClosed && areaPts.length > 0) {
+        setAreaPts((pts) => pts.slice(0, -1));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tool, areaPts, areaClosed]);
 
   // Figma-style trackpad navigation: two-finger scroll pans (x/y), pinch
   // (wheel + ctrlKey) zooms. Native non-passive listener so we can
@@ -245,7 +277,7 @@ export default function CanvasView() {
     }
     // rooms
     for (const r of rooms) {
-      if (pointInPoly(wx, wy, r.points)) {
+      if (pointInPolygon(wx, wy, r.points)) {
         return { type: "room", id: r.id };
       }
     }
@@ -349,8 +381,8 @@ export default function CanvasView() {
     if (e.button === 2) return; // right-drag handled separately
     const { x: wx, y: wy } = toWorld(e.clientX, e.clientY);
 
-    // pan via space or middle button
-    if (spaceDown.current || e.button === 1) {
+    // pan via the Pan tool, space or middle button
+    if (tool === "pan" || spaceDown.current || e.button === 1) {
       pan.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
       (e.target as Element).setPointerCapture?.(e.pointerId);
       return;
@@ -362,14 +394,12 @@ export default function CanvasView() {
         setChainStart(rp);
       } else {
         const endId = store.addWall(chainStart, rp, DEFAULT_THICKNESS);
-        const endNode = doc.nodes[endId] ?? { x: rp.x, y: rp.y };
         setChainStart({
           x: rp.x,
           y: rp.y,
           nodeId: endId,
           snap: rp.snap,
         });
-        void endNode;
       }
       return;
     }
@@ -385,6 +415,32 @@ export default function CanvasView() {
     if (tool === "text") {
       const text = window.prompt("Escribe el texto del plano:", "Texto");
       if (text !== null && text.trim()) store.addText(wx, wy, text);
+      return;
+    }
+
+    if (tool === "area") {
+      // A finished polygon is replaced by a new one on the next click.
+      if (areaClosed) {
+        const rp = resolvePoint(wx, wy, null);
+        setAreaPts([{ x: rp.x, y: rp.y }]);
+        setAreaClosed(false);
+        return;
+      }
+      const tol = 10 / z;
+      const first = areaPts[0];
+      const last = areaPts[areaPts.length - 1];
+      // Clicking the first vertex (or double-clicking the last) closes it.
+      if (
+        areaPts.length >= 3 &&
+        (dist(wx, wy, first.x, first.y) <= tol ||
+          dist(wx, wy, last.x, last.y) <= tol)
+      ) {
+        setAreaClosed(true);
+        return;
+      }
+      const rp = resolvePoint(wx, wy, last ? { ...last, snap: "none" } : null);
+      if (last && dist(rp.x, rp.y, last.x, last.y) < 1e-6) return;
+      setAreaPts([...areaPts, { x: rp.x, y: rp.y }]);
       return;
     }
 
@@ -481,7 +537,9 @@ export default function CanvasView() {
 
   const onPointerMove = (e: React.PointerEvent) => {
     const { x: wx, y: wy } = toWorld(e.clientX, e.clientY);
-    setCursor({ x: wx, y: wy });
+    // The live cursor is only needed to preview the wall being drawn; skipping
+    // it otherwise avoids re-rendering the whole canvas on every mouse move.
+    if (tool === "wall" || tool === "area") setCursor({ x: wx, y: wy });
 
     if (pan.current) {
       setView({
@@ -609,6 +667,30 @@ export default function CanvasView() {
       ? resolvePoint(cursor.x, cursor.y, chainStart)
       : null;
 
+  // ---- area tool preview: next vertex (snapped) or the closing point ----
+  const areaFirst = areaPts[0];
+  const areaLast = areaPts[areaPts.length - 1];
+  const areaNearFirst =
+    tool === "area" &&
+    !areaClosed &&
+    areaPts.length >= 3 &&
+    cursor != null &&
+    dist(cursor.x, cursor.y, areaFirst.x, areaFirst.y) <= 10 / z;
+  const areaPreview =
+    tool === "area" && !areaClosed && areaLast && cursor
+      ? areaNearFirst
+        ? { x: areaFirst.x, y: areaFirst.y }
+        : resolvePoint(cursor.x, cursor.y, { ...areaLast, snap: "none" })
+      : null;
+  const areaShape =
+    areaPts.length > 0
+      ? areaClosed
+        ? areaPts
+        : areaPreview && !areaNearFirst
+          ? [...areaPts, { x: areaPreview.x, y: areaPreview.y }]
+          : areaPts
+      : [];
+
   const inv = 1 / z; // counter-scale factor for text/handles
 
   const gridStep = gridMajorStep(settings.unit);
@@ -698,9 +780,11 @@ export default function CanvasView() {
   const cursorClass =
     tool === "select"
       ? "csr-default"
-      : tool === "delete"
-        ? "csr-delete"
-        : "csr-cross";
+      : tool === "pan"
+        ? "csr-grab"
+        : tool === "delete"
+          ? "csr-delete"
+          : "csr-cross";
 
   return (
     <svg
@@ -709,6 +793,7 @@ export default function CanvasView() {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endInteraction}
+      onPointerCancel={endInteraction}
       onPointerLeave={endInteraction}
       onContextMenu={onContextMenu}
       onMouseDownCapture={onMouseDownCapture}
@@ -1123,6 +1208,18 @@ export default function CanvasView() {
             <MeasureLabel m={measure} inv={inv} unit={settings.unit} />
           </g>
         )}
+
+        {/* area overlay */}
+        {tool === "area" && areaShape.length > 0 && (
+          <AreaOverlay
+            pts={areaPts}
+            shape={areaShape}
+            closed={areaClosed}
+            nearFirst={areaNearFirst}
+            inv={inv}
+            unit={settings.unit}
+          />
+        )}
       </g>
     </svg>
   );
@@ -1283,25 +1380,6 @@ function renderPrims(
   });
 }
 
-function pointInPoly(
-  px: number,
-  py: number,
-  points: { x: number; y: number }[],
-): boolean {
-  let inside = false;
-  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-    const xi = points[i].x;
-    const yi = points[i].y;
-    const xj = points[j].x;
-    const yj = points[j].y;
-    const intersect =
-      yi > py !== yj > py &&
-      px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
 function JambCaps({
   op,
   doc,
@@ -1393,5 +1471,107 @@ function MeasureLabel({
     >
       {formatLen(len, unit)}
     </text>
+  );
+}
+
+function AreaOverlay({
+  pts,
+  shape,
+  closed,
+  nearFirst,
+  inv,
+  unit,
+}: {
+  pts: { x: number; y: number }[];
+  shape: { x: number; y: number }[];
+  closed: boolean;
+  nearFirst: boolean;
+  inv: number;
+  unit: import("../types").Unit;
+}) {
+  const BLUE = "#2563eb";
+  const polyPts = shape.map((p) => `${p.x},${p.y}`).join(" ");
+  const showArea = shape.length >= 3;
+  const area = showArea ? Math.abs(polygonArea(shape)) : 0;
+  const c = showArea ? polygonCentroid(shape) : null;
+  const m2 = formatArea(area, "m");
+  const label = unit === "in" ? `${m2} · ${formatArea(area, "in")}` : m2;
+
+  // Edge lengths for every segment that is part of the shape.
+  const edges = closed ? shape.length : shape.length - 1;
+  const edgeLabels: React.ReactNode[] = [];
+  for (let i = 0; i < edges; i++) {
+    const a = shape[i];
+    const b = shape[(i + 1) % shape.length];
+    const len = dist(a.x, a.y, b.x, b.y);
+    if (len < 1) continue;
+    edgeLabels.push(
+      <text
+        key={i}
+        x={(a.x + b.x) / 2}
+        y={(a.y + b.y) / 2 - 6 * inv}
+        fontSize={11 * inv}
+        textAnchor="middle"
+        className="measure-text"
+      >
+        {formatLen(len, unit)}
+      </text>,
+    );
+  }
+
+  return (
+    <g>
+      {showArea && (
+        <polygon
+          points={polyPts}
+          fill={BLUE}
+          fillOpacity={closed ? 0.16 : 0.07}
+          stroke="none"
+        />
+      )}
+      {closed ? (
+        <polygon
+          points={polyPts}
+          fill="none"
+          stroke={BLUE}
+          strokeWidth={2 * inv}
+          strokeLinejoin="round"
+        />
+      ) : (
+        <polyline
+          points={polyPts}
+          fill="none"
+          stroke={BLUE}
+          strokeWidth={1.5 * inv}
+          strokeDasharray={`${5 * inv} ${4 * inv}`}
+          strokeLinejoin="round"
+        />
+      )}
+      {edgeLabels}
+      {pts.map((p, i) => (
+        <circle
+          key={i}
+          cx={p.x}
+          cy={p.y}
+          r={(i === 0 && nearFirst ? 7 : 4) * inv}
+          fill={i === 0 && !closed ? "#fff" : BLUE}
+          stroke={BLUE}
+          strokeWidth={1.5 * inv}
+        />
+      ))}
+      {c && (
+        <text
+          x={c.x}
+          y={c.y}
+          fontSize={(closed ? 15 : 13) * inv}
+          fontWeight={closed ? 700 : 500}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          className="measure-text"
+        >
+          {label}
+        </text>
+      )}
+    </g>
   );
 }

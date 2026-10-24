@@ -11,6 +11,7 @@ import {
   displayStep,
 } from "../lib/units";
 import { Trash2 } from "lucide-react";
+import ColorPicker from "./ColorPicker";
 import { DEFAULT_FURNITURE_FILL, DEFAULT_STROKE, safeColor } from "../lib/appearance";
 
 function NumberField({
@@ -112,30 +113,16 @@ function ColorField({
   beginChange: () => void;
   onLive: (value: string) => void;
 }) {
-  const changed = useRef(false);
-  const color = safeColor(value, fallback);
   return (
-    <label className="field color-field">
+    <div className="field color-field">
       <span>{label}</span>
-      <div className="color-field-input">
-        <input
-          type="color"
-          value={color}
-          aria-label={label}
-          onChange={(e) => {
-            if (!changed.current) {
-              beginChange();
-              changed.current = true;
-            }
-            onLive(e.target.value);
-          }}
-          onBlur={() => {
-            changed.current = false;
-          }}
-        />
-        <span>{color.toUpperCase()}</span>
-      </div>
-    </label>
+      <ColorPicker
+        label={label}
+        value={safeColor(value, fallback)}
+        onBegin={beginChange}
+        onChange={onLive}
+      />
+    </div>
   );
 }
 

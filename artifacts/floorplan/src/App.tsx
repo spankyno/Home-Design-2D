@@ -187,7 +187,14 @@ function Shortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      )
+        return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -215,6 +222,9 @@ function Shortcuts() {
         case "v":
           setTool("select");
           break;
+        case "h":
+          setTool("pan");
+          break;
         case "w":
           setTool("wall");
           break;
@@ -229,6 +239,9 @@ function Shortcuts() {
           break;
         case "m":
           setTool("measure");
+          break;
+        case "a":
+          setTool("area");
           break;
         case "x":
           setTool("delete");

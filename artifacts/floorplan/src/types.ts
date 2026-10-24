@@ -2,11 +2,13 @@ export type Unit = "m" | "cm" | "in";
 
 export type Tool =
   | "select"
+  | "pan"
   | "wall"
   | "door"
   | "window"
   | "text"
   | "measure"
+  | "area"
   | "delete";
 
 export type ObjectEffect = "none" | "shadow" | "glow";
