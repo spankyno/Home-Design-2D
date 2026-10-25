@@ -23,7 +23,7 @@ const features = [
     number: "03",
     title: "Guarda y comparte",
     description:
-      "Deshaz y rehaz cambios mientras trabajas; el plano se guarda solo en tu navegador. Cuando esté listo, expórtalo como PNG, PDF o JSON, importa archivos JSON validados y compártelo por correo.",
+      "Deshaz y rehaz cambios mientras trabajas; el plano se guarda solo en tu navegador. Cuando esté listo, expórtalo como PNG, PDF o JSON, importa archivos JSON validados y compártelo como archivo.",
     icon: Ruler,
   },
 ];
@@ -188,7 +188,7 @@ export default function AcercaDe() {
               y conserva el control con deshacer y rehacer. Los estilos de color,
               degradado y efecto permiten distinguir los elementos sin complicar el
               dibujo. Todo ocurre en tu navegador: el plano se guarda en local y
-              solo sale de él si decides exportarlo o enviarlo por correo.
+              solo sale de él si decides exportarlo.
             </p>
             <div className="about-method__note">
               <ArrowDownRight size={17} aria-hidden="true" />
@@ -236,9 +236,9 @@ export default function AcercaDe() {
             </div>
             <div className="stack-row">
               <span className="stack-row__number">06</span>
-              <strong>Servicio y alojamiento</strong>
-              <span>Express · Cloudflare Pages y Workers</span>
-              <span className="stack-row__detail">API para el envío por correo y publicación estática</span>
+              <strong>Alojamiento</strong>
+              <span>Cloudflare Pages</span>
+              <span className="stack-row__detail">Publicación estática y distribución global</span>
             </div>
           </div>
         </section>
