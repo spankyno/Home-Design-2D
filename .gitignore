@@ -10,8 +10,6 @@ dist/
 # Env / secrets
 .env
 .env.*
-!.env.example
-!.env.cloudflare.example
 
 # IDE / OS
 .DS_Store
@@ -25,15 +23,7 @@ dist/
 npm-debug.log*
 pnpm-debug.log*
 
-# Cloudflare
-.wrangler/
-.dev.vars
-cloudflare-worker/.wrangler/
-
 # Test / coverage
 coverage/
 
-# Replit local
-.replit
-.cache/
 
