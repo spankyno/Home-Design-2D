@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://home-design-2d.pages.dev/sitemap.xml
