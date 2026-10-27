@@ -6,7 +6,7 @@ A minimalist, fast, precise single-page floor plan editor (Figma + AutoCAD + Not
 
 - App runs via the `artifacts/floorplan: web` workflow (Vite dev server).
 - `pnpm --filter @workspace/floorplan run typecheck` — typecheck the editor
-- Frontend-only editor: no auth or database; state persists in `localStorage` (`floorplan:v1`). Optional `@workspace/api-server` exposes health check only. Export PNG/PDF/JSON is client-side.
+- Frontend-only editor: no auth or database; state persists in `localStorage` (`floorplan:v1`). Export PNG/PDF/JSON is client-side.
 
 ## Stack
 

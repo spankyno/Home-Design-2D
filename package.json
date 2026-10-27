@@ -9,18 +9,10 @@
   },
   "scripts": {
     "build": "pnpm --filter @workspace/floorplan run build",
-    "build:all": "pnpm -r --if-present run build",
-    "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm --filter @workspace/floorplan run typecheck",
+    "test": "pnpm --filter @workspace/floorplan run test:logic"
   },
   "devDependencies": {
-    "prettier": "^3.8.3",
     "typescript": "~5.9.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "@scalar/types": "0.24.0",
-      "esbuild": "0.27.3"
-    }
   }
 }

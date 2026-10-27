@@ -15,7 +15,7 @@ Editor de planos 2D que funciona por completo en el navegador. Dibuja paredes, c
 - [Puesta en marcha](#puesta-en-marcha)
 - [Datos, persistencia y formato JSON](#datos-persistencia-y-formato-json)
 - [Despliegue en Cloudflare Pages](#despliegue-en-cloudflare-pages)
-- [API opcional (envío por correo)](#api-opcional-envío-por-correo)
+- [Seguridad](#seguridad)
 - [SEO](#seo)
 - [Pruebas](#pruebas)
 - [Autor y contacto](#autor-y-contacto)
@@ -84,13 +84,13 @@ Pulsa `?` dentro de la aplicación para ver la lista completa.
 | Área | Tecnologías |
 |---|---|
 | Interfaz | React 19, TypeScript |
-| Estilos y rutas | Tailwind CSS 4, Radix UI, wouter |
+| Estilos y rutas | CSS propio (una sola hoja de estilos), wouter |
 | Dibujo | SVG propio (sin librerías de canvas) |
 | Validación | Zod |
-| Exportación | jsPDF, html2canvas |
+| Exportación | jsPDF (carga bajo demanda) |
 | Iconos | lucide-react |
+| Tipografía | Inter (`@fontsource/inter`, alojada en local) |
 | Compilación | Vite 7, pnpm workspaces |
-| API opcional | Express (Node) o Cloudflare Worker |
 | Alojamiento | Cloudflare Pages |
 
 ---
@@ -100,24 +100,22 @@ Pulsa `?` dentro de la aplicación para ver la lista completa.
 ```
 .
 ├── artifacts/
-│   ├── floorplan/            # El editor (aplicación web)
-│   │   ├── index.html        # Metaetiquetas SEO, JSON-LD y tracker
-│   │   ├── public/           # og-image.png, iconos, manifest, robots, _headers
-│   │   ├── src/
-│   │   │   ├── App.tsx       # Rutas y espacio de trabajo
-│   │   │   ├── store.tsx     # Estado, historial, autosave y acciones
-│   │   │   ├── types.ts      # Modelo de datos
-│   │   │   ├── components/   # Lienzo, barra de herramientas, paneles, diálogos
-│   │   │   ├── pages/        # Acerca de, 404
-│   │   │   └── lib/          # Geometría, habitaciones, render, exportación,
-│   │   │                     # esquema Zod, persistencia, layout, SEO
-│   │   └── tests/            # Pruebas de lógica y de SEO
-│   └── api-server/           # API Express (envío de planos por correo)
-├── cloudflare-worker/        # Misma API como Cloudflare Worker
-├── lib/                      # Paquetes compartidos del workspace
+│   └── floorplan/            # El editor (aplicación web)
+│       ├── index.html        # Metaetiquetas SEO, JSON-LD y tracker
+│       ├── public/           # og-image.png, iconos, manifest, robots, _headers
+│       ├── src/
+│       │   ├── App.tsx       # Rutas y espacio de trabajo
+│       │   ├── store.tsx     # Estado, historial, autosave y acciones
+│       │   ├── types.ts      # Modelo de datos
+│       │   ├── components/   # Lienzo, barra de herramientas, paneles, diálogos
+│       │   ├── pages/        # Página «Acerca de»
+│       │   └── lib/          # Geometría, habitaciones, render, exportación,
+│       │                     # esquema Zod, persistencia, layout, SEO
+│       └── tests/            # Pruebas de lógica, seguridad y SEO
 ├── scripts/
 │   └── generate-brand-assets.py   # Regenera og-image.png e iconos
 ├── DEPLOY-CLOUDFLARE.md      # Guía de despliegue
+├── SECURITY-AUDIT.md         # Auditoría de seguridad y estado de las correcciones
 └── pnpm-workspace.yaml
 ```
 
@@ -157,8 +155,9 @@ pnpm --filter @workspace/floorplan run serve
 Otros comandos útiles:
 
 ```bash
-pnpm --filter @workspace/floorplan run typecheck   # comprobación de tipos
-pnpm --filter @workspace/floorplan run test:logic  # pruebas de lógica y SEO
+pnpm run typecheck   # comprobación de tipos
+pnpm test            # pruebas de lógica, seguridad y SEO
+pnpm audit           # vulnerabilidades en dependencias
 ```
 
 Variables de entorno de compilación opcionales: `PORT` (por defecto 5173) y `BASE_PATH` (por defecto `/`).
@@ -206,27 +205,19 @@ La guía completa, con los fallos de despliegue ya resueltos, está en [`DEPLOY-
 
 ---
 
-## API opcional (envío por correo)
+## Seguridad
 
-El repositorio incluye un servicio para enviar el plano en PDF por correo mediante [Resend](https://resend.com), disponible como servidor Express (`artifacts/api-server`) o como Cloudflare Worker (`cloudflare-worker`).
+La aplicación es **solo frontend**: no hay backend, base de datos ni cuentas, y el plano nunca sale del navegador salvo que lo exportes. Medidas aplicadas (detalle en [`SECURITY-AUDIT.md`](./SECURITY-AUDIT.md)):
 
-**Endpoints** (Express): `POST /send-plan` y `GET /healthz`.
+- **Entrada validada:** toda importación y todos los datos de `localStorage` pasan por un esquema Zod 4 con límites de tamaño, comprobados *antes* de validar para evitar bloqueos con archivos enormes.
+- **Sin sumideros de XSS:** no se usa `innerHTML`, `eval` ni `new Function`; los colores se validan como `#rrggbb` y los textos se escapan en los SVG exportados.
+- **Content-Security-Policy estricta** y cabeceras de seguridad (HSTS, `frame-ancestors 'none'`, `X-Frame-Options`, COOP…) en `public/_headers`. `script-src` solo admite el propio origen y el script del dashboard de analítica.
+- **Sin recursos de terceros innecesarios:** la fuente Inter se sirve desde el propio dominio.
+- **Referencias seguras:** las puertas y ventanas solo pueden apuntar a paredes propias (`Object.hasOwn`).
 
-> **Nota:** el componente `EmailDialog` y el endpoint existen, pero el diálogo no está montado actualmente en la interfaz del editor.
+Si cambias de proveedor de analítica o añades otro recurso externo, **actualiza la CSP** en `public/_headers` o el navegador lo bloqueará. Para depurarla, cambia el nombre de la cabecera a `Content-Security-Policy-Report-Only` y revisa la consola.
 
-| Variable | Descripción |
-|---|---|
-| `RESEND_API_KEY` | Clave de Resend (secreto) |
-| `EMAIL_API_KEY` | Clave que debe enviar el frontend en `X-API-Key` (secreto) |
-| `EMAIL_FROM` | Remitente, por ejemplo `Floor Plan <onboarding@resend.dev>` |
-| `ALLOWED_ORIGINS` | Orígenes del frontend permitidos, separados por comas |
-| `EMAIL_RATE_LIMIT` | Envíos permitidos por ventana (por defecto 5) |
-| `EMAIL_RATE_WINDOW_MS` | Duración de la ventana en ms (por defecto 900000) |
-| `LOG_LEVEL` | Nivel de log (solo Express) |
-
-En el frontend: `VITE_API_URL` (URL de la API) y `VITE_EMAIL_API_KEY`.
-
-Para el Worker: `cd cloudflare-worker && npx wrangler secret put RESEND_API_KEY && npx wrangler deploy`.
+Comprobación de dependencias: `pnpm audit`.
 
 ---
 
@@ -235,7 +226,7 @@ Para el Worker: `cd cloudflare-worker && npx wrangler secret put RESEND_API_KEY 
 - **Fuente única:** `src/lib/site.ts` contiene URL, títulos, descripciones, enlaces del autor y el JSON-LD (schema.org: `Person`, `WebSite`, `WebApplication`, `WebPage`/`AboutPage`, `BreadcrumbList`).
 - **HTML estático por ruta:** el build genera `acerca-de.html` y `sitemap.xml`, para que rastreadores y vistas previas sociales que no ejecutan JavaScript vean los datos correctos de cada página. En la navegación interna, el hook `useSeo` actualiza las metaetiquetas.
 - **Social:** Open Graph y Twitter Card con `og-image.png` (1200×630).
-- **Rendimiento:** la exportación (jsPDF) se carga solo al exportar; las fuentes se cargan una única vez.
+- **Rendimiento:** la exportación (jsPDF) se carga solo al exportar; la fuente Inter se aloja en local.
 - **Archivos:** `robots.txt`, `site.webmanifest`, iconos y `_headers` (cabeceras de seguridad y caché inmutable para `/assets/*`).
 - **Imagen social e iconos:** `python3 scripts/generate-brand-assets.py` (requiere Pillow).
 
@@ -249,7 +240,7 @@ Si cambias el dominio, actualiza `SITE.url` en `site.ts`, además de `index.html
 pnpm --filter @workspace/floorplan run test:logic
 ```
 
-Cubre la validación de importación y de datos guardados, el manejo de errores de `localStorage`, alinear, distribuir y guías, y la coherencia del SEO (JSON-LD, etiquetas, tamaño de `og-image.png`, `robots.txt` y footer).
+Cubre la validación de importación y de datos guardados, el manejo de errores de `localStorage`, alinear, distribuir y guías, las correcciones de seguridad (archivos enormes, referencias heredadas, escapado, CSP) y la coherencia del SEO (JSON-LD, etiquetas, tamaño de `og-image.png`, `robots.txt` y footer).
 
 ---
 
